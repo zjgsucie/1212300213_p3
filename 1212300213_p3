@@ -1,0 +1,84 @@
+
+#include <linux/module.h>  
+#include <linux/kernel.h>  
+#include <linux/types.h>  
+#include <linux/fs.h>  
+#include <linux/init.h>  
+#include <linux/delay.h>  
+#include <asm/uaccess.h>  
+#include <asm/irq.h>  
+#include <asm/io.h>  
+#include <linux/cdev.h>  
+#include <linux/device.h>  
+//载入程序调用的相关函数和头文件
+  
+#define LED_MAJOR 241                 //设定LED_MAJOR的主设备号
+static int led_major = LED_MAJOR;        //设置静态变量 led_major
+volatile unsigned long *gpbcon = NULL ;    //控制寄存器
+volatile unsigned long *gpbdat = NULL ;      //数据寄存器
+volatile unsigned long *gpbup = NULL ;     //端口上拉寄存器
+  
+struct cdev cdev;                      //创建一个名为cdev结构体
+
+//打开字符设备，打印first_drv_open
+static int led_drv_open(struct inode *inode, struct file *file)  
+{  
+    printk("first_drv_open\n");  
+    return 0;  
+}  
+
+//写入字符设备，返回0
+static ssize_t led_drv_write(struct file *file, const char __user *buf, size_t count, loff_t * ppos)  
+{  
+    return 0;  
+}  
+
+static struct file_operations led_drv_fops = {  
+.owner  =   THIS_MODULE,   //将owner设置为这个设备 
+    .open   =   led_drv_open,       //调用first_drv_open
+    .write  =   led_drv_write,       //调用first_drv_write
+};  
+
+
+static void led_setup_cdev(void)            //初始化cedv
+{  
+  int err, devno = MKDEV(led_major, 0);    //构造从设备号 
+  cdev_init(&cdev, &led_drv_fops);          //调用cedv_init（）函数，将设备结构体cdev与file_operators指针相关联
+  cdev.owner = THIS_MODULE;            //使驱动程序属于该模块
+  cdev.ops = &led_drv_fops;                //制定led_drv_fops为字符设备的文件操作函数指针
+  err = cdev_add(&cdev, devno, 1);         //devno 为第一个设备号，1为数量  ，将cedv注册到系统中
+  if (err)  
+    printk(KERN_NOTICE "Error %d adding", err);   //发生错误，报告错误并退出
+}  
+  
+static int led_drv_init(void)  
+{  
+    int result;                       //定义result
+    dev_t devno;  
+    devno=MKDEV(led_major,0);      //构造设备号
+    if(led_major)                   //如果该值不为0，则静态申请设备号
+        result=register_chrdev_region(devno,1,"led1_dev");      //对result进行赋值
+    else                            //如果该值为0，则动态申请设备号
+    {  
+        result = alloc_chrdev_region(&devno,0,1,"led1_dev");/  
+        led_major = MAJOR(devno);  
+    }  
+    if(result<0)                      //对result进行判断
+    {  
+        printk (KERN_WARNING "hello: can't get major number %d\n", led_major);   
+    //输出错误警告 hello: can't get major number + 设备号
+        return result;  
+    }          
+    led_setup_cdev();      
+    return 0;     
+}  
+  
+static void led_drv_exit(void)  
+{  
+    cdev_del(&cdev);                                   //注销cdev  
+    unregister_chrdev_region(MKDEV(led_major,0),1);       //释放
+}  
+  
+module_init(led_drv_init);  
+module_exit(led_drv_exit);  
+MODULE_LICENSE("GPL"); //GPL
